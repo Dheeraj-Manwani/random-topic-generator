@@ -1,6 +1,8 @@
+import { interestCategories, interestExpansions } from "./interest-topics";
+import { creativeSubjects } from "./creative-topics";
 export type Difficulty = "Easy" | "Medium" | "Hard";
 export type Topic = { id: string; category: string; subject: string; text: string; difficulty: Difficulty };
-export const categories = [
+const originalCategories = [
   { name: "Everyday life", icon: "☕", subjects: `the perfect slow morning|a small kindness you still remember|a hobby everyone should try|your most useful everyday object|the joy of doing nothing|why people keep things they never use|the unwritten rules of elevators|whether convenience makes us impatient|why we romanticize the past|how a neighborhood becomes a community|whether routines create freedom or limit it|the hidden cost of always being available|who gets to define a successful life|the trade-off between privacy and belonging|whether a simple life is a privilege` },
   { name: "Tech & AI", icon: "⌘", subjects: `an app you wish existed|a day without your phone|the most underrated invention|the gadget you would uninvent|what your search history says about you|whether AI can be a good friend|smart homes that outsmart their owners|the right age for a first smartphone|whether algorithms shape our taste|the future of passwords|who owns art made by AI|the right to disappear from the internet|whether software should have an expiry date|human accountability for autonomous decisions|whether digital memories should be editable` },
   { name: "Money & business", icon: "◈", subjects: `your best purchase under ten dollars|a business you could start tomorrow|what you would do with an unexpected bonus|a skill worth paying to learn|the appeal of a neighborhood shop|why subscriptions are everywhere|whether cash makes spending feel different|the value of a four-day workweek|whether tipping should exist|turning a hobby into a business|whether unlimited growth is a sensible goal|who pays for free online services|the ethics of personalized pricing|whether companies should publish every salary|the difference between creating value and capturing it` },
@@ -22,7 +24,9 @@ export const categories = [
   { name: "Design & cities", icon: "▦", subjects: `a door that is confusing to open|your ideal public park|the chair you could sit in all day|a sign that made you smile|a building you would turn into something else|whether cities need more quiet spaces|what makes a street feel welcoming|the hidden design of waiting rooms|why some objects age beautifully|whether cars should be guests in cities|who gets excluded by supposedly universal design|the politics of hostile architecture|whether a city should have a maximum size|balancing heritage with accessible housing|how to design for needs that are not visible` },
   { name: "Oddly specific", icon: "⚡", subjects: `the social life of a missing sock|why the second pancake is always better|the correct number of browser tabs|the tiny spoon everyone prefers|a dramatic review of your office printer|the etiquette of the last slice of pizza|why hotel corridors feel mysterious|the unspoken politics of a shared thermostat|whether a hot dog is a sandwich|why we wave at someone who cannot hear us|whether a replica of your childhood home is still home|the philosophy of saving the best bite for last|who owns the armrest on a plane|the ethics of returning a shopping cart|whether a playlist is a form of autobiography` },
 ];
-export const topics: Topic[] = categories.flatMap(({name, subjects}) => subjects.split("|").map((subject, i) => ({id: `${name}-${i}`, category:name, subject, text: `${subject[0].toUpperCase()}${subject.slice(1)}`, difficulty: i < 5 ? "Easy" : i < 10 ? "Medium" : "Hard"})));
+export const categories = [...originalCategories, ...interestCategories];
+const originalTopics: Topic[] = categories.flatMap(({name, subjects}) => subjects.split("|").map((subject, i) => ({id: `${name}-${i}`, category:name, subject, text: `${subject[0].toUpperCase()}${subject.slice(1)}`, difficulty: i % 15 < 5 ? "Easy" : i % 15 < 10 ? "Medium" : "Hard"})));
+export const topics: Topic[] = [...originalTopics, ...categories.flatMap(({name}) => [creativeSubjects[name], interestExpansions[name]].filter(Boolean).join("|").split("|").filter(Boolean).map((subject, i): Topic => ({id: `${name}-creative-${i}`, category: name, subject, text: `${subject[0].toUpperCase()}${subject.slice(1)}`, difficulty: i % 15 < 5 ? "Easy" : i % 15 < 10 ? "Medium" : "Hard"})))];
 export const challenges = [
   { name: "Free speak", icon: "🎙", label: "Make it your own", instruction: "Take a position, tell a story, or follow your curiosity.", prefix: "Talk about" },
   { name: "Hot take", icon: "🌶️", label: "A little controversy", instruction: "Take a surprising position. Give two reasons and address one objection.", prefix: "Share your most unexpected take on" },
@@ -37,4 +41,12 @@ export function selectTopic(pool: Topic[], used: string[], random = Math.random)
   const unseen = pool.filter(t => !used.includes(t.id));
   const choices = unseen.length ? unseen : pool;
   return choices[Math.floor(random() * choices.length)];
+}
+
+/** Exclusions apply to explicit choices as well as random draws. */
+export function selectChallenge(preferred: string, excluded: string[], random = Math.random): string | undefined {
+  if (preferred === "None") return "None";
+  const eligible = challenges.filter(item => !excluded.includes(item.name));
+  if (eligible.some(item => item.name === preferred)) return preferred;
+  return eligible[Math.floor(random() * eligible.length)]?.name;
 }

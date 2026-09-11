@@ -10,9 +10,9 @@ A single-page impromptu speaking playground built on the supplied Next.js 16, Re
 
 ## Experience
 
-Pull or click the red lever, click Spin my topic, or press Space outside interactive controls. Choose one of 20 categories, three difficulty levels, eight challenge formats, and four speaking durations. Topics avoid repeats until the selected pool is exhausted. Start/pause/reset the timer; optionally enable synthesized sound. Save topic/challenge pairs in browser-local storage and revisit recent spins during a session. Reduced-motion preferences suppress blinking and reel movement.
+Pull or click the red lever, click Spin my topic, or press Space outside interactive controls. Choose one of 20 categories, three difficulty levels, eight challenge formats, and a two-minute practice timer. Topics avoid repeats until the selected pool is exhausted. Start/pause/reset the timer; independently toggle synthesized background music and sound effects in the compact navbar. Save topic/challenge pairs in browser-local storage and revisit recent spins during a session. Topics scroll through a single continuous text reel and decelerate to the selected result. Brass-mounted glass bulbs chase in staggered patterns. Reduced-motion preferences suppress blinking and reel movement.
 
-`lib/topics.ts` contains 300 original topic seeds: 15 per niche and 5 per difficulty within each niche. Eight compatible speaking formats yield 2,400 combinations; these are not 2,400 independently authored topics. Difficulty is editorial, based on familiarity and abstraction, not a scientific proficiency measure. No paid service, account, microphone access, or model API is needed. Saved items are browser-specific, and private browsing may discard them.
+`lib/topics.ts` and `lib/creative-topics.ts` contain 600 original topic seeds: 30 per niche and 10 per difficulty within each niche. Eight compatible speaking formats yield 4,800 combinations; these are not 4,800 independently authored topics. Difficulty is editorial, based on familiarity and abstraction, not a scientific proficiency measure. No paid service, account, microphone access, or model API is needed. Saved items are browser-specific, and private browsing may discard them.
 
 ## Research and product rationale
 
@@ -45,4 +45,12 @@ The initial product is free and frictionless. The research suggests potential la
 
 ## Validation
 
-Production compilation and static export; ESLint; topic-bank checks for 300 unique IDs and text entries, all 60 category/difficulty combinations, selection without repetition before pool exhaustion, and empty-pool behavior. Local HTTP rendering checked separately. Browser interaction/visual testing was not performed.
+Production compilation and static export; ESLint; topic-bank checks for 600 unique IDs and text entries, all 60 category/difficulty combinations, selection without repetition before pool exhaustion, and empty-pool behavior. Local HTTP rendering checked separately. Browser interaction/visual testing was not performed.
+
+
+## Latest interface update
+
+The machine appears before the filters. Main and library filters use shadcn Select with Radix keyboard navigation; library dropdowns portal inside the native dialog. The audio controls are circular switches. Irregular golden fairy-light clusters in the corners and margins, admission-ticket details, and subtle stars respect reduced motion. The previous conversation category section and speaking-time filter are removed.
+
+The machine lamps alternate between two groups with a soft overlapping glow, based on frame-by-frame inspection of the supplied seven-second reference video. Golden page lights use three independent twinkle patterns and remain outside the topic area.
+
