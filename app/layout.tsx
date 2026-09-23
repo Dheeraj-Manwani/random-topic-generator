@@ -13,7 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Speak Easy — The Topic Arcade",
+  title: "Topic Spin — by Crawling Thoughts",
+  authors: [{ name: "Crawling Thoughts", url: "https://www.instagram.com/crawling.thoughts/" }],
   description: "Pull the lever. Find your voice. A playful topic arcade with hundreds of speaking prompts, creative challenges, and a practice timer.",
 };
 

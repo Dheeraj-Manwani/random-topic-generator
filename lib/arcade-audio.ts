@@ -5,6 +5,10 @@ export class ArcadeAudio {
   private effectsGain = this.context.createGain();
   private musicTimer?: ReturnType<typeof setInterval>;
   private beat = 0;
+  private volume = .7;
+  private musicEnabled = false;
+  private soundEnabled = false;
+  private ducked = false;
 
   constructor() {
     this.musicGain.gain.value = 0;
@@ -37,15 +41,29 @@ export class ArcadeAudio {
     if (this.context.state === "suspended") void this.context.resume().catch(() => {});
   }
 
+  setVolume(value: number) {
+    this.volume = Math.max(0, Math.min(1, value));
+    this.level(this.effectsGain, this.soundEnabled ? this.volume : 0);
+    this.updateMusicLevel();
+  }
+
+  setDucked(value: boolean) { this.ducked = value; this.updateMusicLevel(); }
+
+  private updateMusicLevel() {
+    this.level(this.musicGain, this.musicEnabled ? .6 * this.volume * (this.ducked ? .2 : 1) : 0);
+  }
+
   setSound(enabled: boolean) {
+    this.soundEnabled = enabled;
     this.resume();
-    this.level(this.effectsGain, enabled ? 1 : 0);
+    this.level(this.effectsGain, enabled ? this.volume : 0);
   }
 
   setMusic(enabled: boolean) {
     this.resume();
     clearInterval(this.musicTimer);
-    this.level(this.musicGain, enabled ? .6 : 0);
+    this.musicEnabled = enabled;
+    this.updateMusicLevel();
     if (!enabled) return;
     const notes = [261.63, 293.66, 329.63, 392, 440, 523.25];
     const tick = () => {

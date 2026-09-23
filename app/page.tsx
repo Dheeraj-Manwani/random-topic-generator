@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import Image from "next/image";
 import AppMenu from "./components/app-menu";
 import TopicLibrary from "./components/topic-library";
 import FilterSelect from "./components/filter-select";
@@ -41,6 +42,10 @@ export default function Home() {
   const [preparing, setPreparing] = useState(false);
   const [sound, setSound] = useState(true);
   const [music, setMusic] = useState(true);
+  const [volume, setVolume] = useState(.7);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [revealing, setRevealing] = useState(false);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [spinning, setSpinning] = useState(false);
   const [round, setRound] = useState<Round | null>(null);
   const [history, setHistory] = useState<Round[]>([]);
@@ -54,7 +59,7 @@ export default function Home() {
   const spinStrip = useRef<HTMLDivElement | null>(null);
   const spinFrame = useRef(0);
   const spinRun = useRef(0);
-  const preferences = useRef({ music: true, sound: true });
+  const preferences = useRef({ music: true, sound: true, volume: .7, reducedMotion: false });
   const audio = useRef<ArcadeAudio | null>(null);
   const dragY = useRef<number | null>(null);
   const pool = topics.filter(t => (category === "All categories" || t.category === category) && (difficulty === "All levels" || t.difficulty === difficulty));
@@ -62,6 +67,17 @@ export default function Home() {
   const isSaved = !!round && saved.some(s => s.topic.id === round.topic.id && s.challenge === round.challenge);
 
   useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("topic-spin-settings") || "{}");
+      preferences.current = {
+        music: typeof stored.music === "boolean" ? stored.music : true,
+        sound: typeof stored.sound === "boolean" ? stored.sound : true,
+        volume: typeof stored.volume === "number" && Number.isFinite(stored.volume) ? Math.max(0, Math.min(1, stored.volume)) : .7,
+        reducedMotion: typeof stored.reducedMotion === "boolean" ? stored.reducedMotion : matchMedia("(prefers-reduced-motion: reduce)").matches,
+      };
+    } catch { preferences.current.reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches; }
+    document.documentElement.dataset.reducedMotion = String(preferences.current.reducedMotion);
+    queueMicrotask(() => {setMusic(preferences.current.music); setSound(preferences.current.sound); setVolume(preferences.current.volume); setReducedMotion(preferences.current.reducedMotion);});
     const recording = new Audio("/spin-sound.m4a");
     recording.preload = "auto";
     recording.load();
@@ -71,11 +87,12 @@ export default function Home() {
         queueMicrotask(() => setSaved(valid)); }
     } catch { /* Storage is optional. */ }
     try { localStorage.removeItem("speak-easy-excluded-challenges"); } catch { /* Storage is optional. */ }
-    return () => { cancelAnimationFrame(spinFrame.current); recording.pause(); recording.removeAttribute("src"); recording.load(); spinSound.current = null; audio.current?.dispose(); audio.current = null; };
+    return () => { if (revealTimer.current) clearTimeout(revealTimer.current); cancelAnimationFrame(spinFrame.current); recording.pause(); recording.removeAttribute("src"); recording.load(); spinSound.current = null; audio.current?.dispose(); audio.current = null; };
   }, []);
   const ensureAudio = useCallback(() => {
     if (!audio.current) {
       const engine = new ArcadeAudio();
+      engine.setVolume(preferences.current.volume);
       engine.setMusic(preferences.current.music);
       engine.setSound(preferences.current.sound);
       audio.current = engine;
@@ -97,9 +114,22 @@ export default function Home() {
       document.removeEventListener("keydown", activate, true);
     };
   }, [ensureAudio]);
+  function persistSettings() { try { localStorage.setItem("topic-spin-settings", JSON.stringify(preferences.current)); } catch { /* Settings still apply for this visit. */ } }
+  function changeVolume(value: number) {
+    preferences.current.volume = value; setVolume(value); persistSettings();
+    if (spinSound.current) spinSound.current.volume = value;
+    try { ensureAudio().setVolume(value); } catch { setNotice("Audio is unavailable in this browser."); }
+  }
+  function toggleReducedMotion() {
+    const value = !preferences.current.reducedMotion;
+    preferences.current.reducedMotion = value; setReducedMotion(value);
+    document.documentElement.dataset.reducedMotion = String(value); persistSettings();
+  }
+  function finishSound() { try { ensureAudio().play(true); } catch { /* Timers also announce completion visually. */ } }
+  useEffect(() => { audio.current?.setDucked(spinning || revealing || preparing); }, [spinning, revealing, preparing]);
   function toggleAudio(channel: "music" | "sound") {
     const enabled = !preferences.current[channel];
-    preferences.current[channel] = enabled;
+    preferences.current[channel] = enabled; persistSettings();
     if (channel === "music") setMusic(enabled); else setSound(enabled);
     if (spinSound.current) spinSound.current.muted = !preferences.current.sound;
     try {
@@ -113,9 +143,9 @@ export default function Home() {
     const nextChallenge = selectChallenge(challenge, []); if (!nextChallenge) return;
     spinLock.current = true; setSpinning(true); setNotice("");
     const run = ++spinRun.current;
-    try { ensureAudio(); } catch { /* The recorded spin and silent fallback still work. */ }
+    try { ensureAudio().setDucked(true); } catch { /* The recorded spin and silent fallback still work. */ }
     const recording = spinSound.current;
-    if (recording) { recording.pause(); recording.currentTime = 0; recording.muted = !preferences.current.sound; }
+    if (recording) { recording.pause(); recording.currentTime = 0; recording.volume = preferences.current.volume; recording.muted = !preferences.current.sound; }
     setSpinTopics([...(round ? [round.topic] : []), ...Array.from({length: 40}, () => pool[Math.floor(Math.random() * pool.length)]), next]);
     function begin(useRecording: boolean) {
       if (run !== spinRun.current || recording !== spinSound.current) return;
@@ -132,7 +162,10 @@ export default function Home() {
         seen.current.push(next!.id); if (seen.current.length > topics.length) seen.current = [next!.id];
         if (round) setHistory(prev => [round, ...prev].slice(0, 9));
         setRound({topic: next!, challenge: nextChallenge!});
-        setSpinning(false); setPreparing(true); spinLock.current = false;
+        setSpinning(false); setRevealing(true);
+        revealTimer.current = setTimeout(() => {
+          setRevealing(false); setPreparing(true); spinLock.current = false;
+        }, preferences.current.reducedMotion ? 500 : 1400);
         // The supplied recording already includes the final-selection sound; let its tail finish.
       }
       spinFrame.current = requestAnimationFrame(frame);
@@ -148,28 +181,28 @@ export default function Home() {
   function chooseRound(r: Round) { const allowedChallenge = selectChallenge(r.challenge, []); if (!allowedChallenge) return; setRound({...r, challenge: allowedChallenge}); setPreparing(true); setView("arcade"); setNotice(""); }
   return (
     <div className="app-shell">
-      <AppMenu view={view} savedCount={saved.length} music={music} sound={sound} disabled={spinning} onNavigate={setView} onAudio={toggleAudio}/>
+      <AppMenu view={view} savedCount={saved.length} music={music} sound={sound} disabled={spinning || revealing} onNavigate={setView} onAudio={toggleAudio} volume={volume} onVolume={changeVolume} reducedMotion={reducedMotion} onReducedMotion={toggleReducedMotion}/>
       <GoldenLights/>
-      {preparing && round && <PreparationModal topic={round.topic} challenge={round.challenge} saved={isSaved} onSave={toggleSave} onDismiss={() => setPreparing(false)}/>}
+      {preparing && round && <PreparationModal topic={round.topic} challenge={round.challenge} saved={isSaved} onSave={toggleSave} onDismiss={() => setPreparing(false)} onFinishSound={finishSound} onNewTopic={() => {setPreparing(false); spin();}}/>}
       <main>
         {view === "arcade" ? <>
         <div className={`arcade-layout ${spinning ? "round-in-motion" : ""}`}><div className="arcade-sparkles" aria-hidden="true"><span>✧</span><span>✦</span><span>✧</span><span>✦</span></div>
-          <section className={`machine ${spinning ? "is-spinning" : ""}`} aria-label="Speaking topic slot machine" aria-busy={spinning}>
-            <div className="machine-top"><Bulbs/><div className="marquee"><span>★</span><h1>Topic Spin</h1><span>★</span></div><Bulbs reverse/></div>
+          <section className={`machine ${spinning ? "is-spinning" : ""} ${revealing ? "is-revealing" : ""}`} aria-label="Speaking topic slot machine" aria-busy={spinning}>
+          <div className="machine-top"><Bulbs/><div className="marquee"><Image className="app-logo" src="/crawling-thoughts.png" alt="Crawling Thoughts logo" width={36} height={36} unoptimized/><h1>Topic Spin</h1><span>★</span></div><Bulbs reverse/></div>
             <div className="machine-body"><div className="machine-stamp"><span>EST. 2026</span><span>GOOD TOPICS. GREAT STORIES.</span><span>№ 001</span></div>
               <div className="result-window"><div className="topic-meta"><span>{spinning ? "FINDING YOUR NEXT BIG IDEA" : round ? `${categories.find(c => c.name === round.topic.category)?.icon}  ${round.topic.category}` : "READY WHEN YOU ARE"}</span><span className="level">{spinning ? "•••" : round?.topic.difficulty || "—"}</span></div>
                 <div className="topic-viewport">
-                  {spinning ? <div ref={spinStrip} className="topic-strip" aria-hidden="true" style={{ "--stops": spinTopics.length - 1 } as CSSProperties}>
+                  {spinning && reducedMotion ? <div className="topic-text"><span className="empty-topic-hint">Choosing your topic...</span></div> : spinning ? <div ref={spinStrip} className="topic-strip" aria-hidden="true" style={{ "--stops": spinTopics.length - 1 } as CSSProperties}>
                     {spinTopics.map((topic, i) => <div className="topic-row" key={i}><h3>{topic.text}.</h3></div>)}
-                  </div> : <div className="topic-text">{round ? <h3>{round.topic.text}.</h3> : <span className="empty-topic-hint">Pull the lever to begin</span>}</div>}
+                  </div> : <div className="topic-text">{round ? <h3>{round.topic.text}.</h3> : <><Image className="empty-snail" src="/crawling-thoughts.png" alt="" width={46} height={46} unoptimized/><span className="empty-topic-hint">Pull the lever to begin</span></>}</div>}
                 </div>
                 <span className="sr-only" role="status" aria-live="polite">{spinning ? "Spinning topics" : round ? round.topic.text + ". " + round.challenge : "No topic selected. Spin to begin."}</span>
                 <div className="challenge-label">{spinning ? "✦  The possibilities are spinning" : round?.challenge === "None" ? "No challenge" : round && currentChallenge ? `${currentChallenge.icon}  ${round.challenge}` : "✦  Your next topic is one spin away"}</div>
               </div>
-              <div className="machine-controls"><span className="speaker-grille" aria-hidden="true"/><button className="spin-button" onClick={spin} disabled={spinning || !pool.length}>{spinning ? "Spinning…" : "Spin my topic"}</button><span className="speaker-grille" aria-hidden="true"/></div>
+              <div className="machine-controls"><span className="speaker-grille" aria-hidden="true"/><button className="spin-button" onClick={spin} disabled={spinning || revealing || !pool.length}>{spinning ? "Spinning…" : "Spin my topic"}</button><span className="speaker-grille" aria-hidden="true"/></div>
               <div className="machine-bottom-label"><span>NO COINS. JUST CURIOSITY.</span><span>∞ FREE PLAYS</span></div>
             </div>
-            <button className="lever" aria-label="Pull lever to generate a random topic" disabled={spinning} onClick={spin} onPointerCancel={() => {dragY.current = null;}} onPointerDown={e => {dragY.current = e.clientY;e.currentTarget.setPointerCapture(e.pointerId);}} onPointerUp={e => {if (dragY.current !== null && e.clientY - dragY.current > 20) spin();dragY.current = null;}}><span className="lever-base"/><span className="lever-arm"><span className="lever-ball"/></span></button>
+            <button className="lever" aria-label="Pull lever to generate a random topic" disabled={spinning || revealing} onClick={spin} onPointerCancel={() => {dragY.current = null;}} onPointerDown={e => {dragY.current = e.clientY;e.currentTarget.setPointerCapture(e.pointerId);}} onPointerUp={e => {if (dragY.current !== null && e.clientY - dragY.current > 20) spin();dragY.current = null;}}><span className="lever-base"/><span className="lever-arm"><span className="lever-ball"/></span></button>
             <div className="machine-foot"/>
           </section>
           <aside className="pull-note"><span>Go on,<br/><em>give it a pull.</em></span><svg width="60" height="75" viewBox="0 0 60 75" fill="none" aria-hidden="true"><path d="M44 2C60 39 39 55 13 48m0 0 13-7M13 48l9 13" stroke="currentColor" strokeWidth="1.5"/></svg></aside>
@@ -177,17 +210,17 @@ export default function Home() {
         <div className="under-machine"><span>Or press <kbd>space</kbd> to spin</span></div>
 
         <section className="filters below-machine" aria-label="Topic filters">
-          <div className="filter-field"><span>CATEGORY</span><FilterSelect label="Category" value={category} onChange={setCategory} disabled={spinning} options={[{value:"All categories",icon:"◎"},...categories.map(c => ({value:c.name,icon:c.icon}))]}/></div>
-          <div className="filter-field"><span>YOUR CHALLENGE</span><FilterSelect label="Your challenge" value={challenge} onChange={setChallenge} disabled={spinning} options={[{value:"None"},{value:"Surprise me",icon:"✧"},...challenges.map(c => ({value:c.name,icon:c.icon}))]}/></div>
-          <div className="filter-field"><span>DIFFICULTY</span><FilterSelect label="Difficulty" value={difficulty} onChange={setDifficulty} disabled={spinning} options={[{value:"All levels"},{value:"Easy"},{value:"Medium"},{value:"Hard"}]}/></div>
-          <button className="filter-reset" title="Reset filters" aria-label="Reset filters" disabled={spinning} onClick={() => {setCategory("All categories");setChallenge("None");setDifficulty("All levels");}}><Icon name="reset" size={18}/></button>
+          <div className="filter-field"><span>CATEGORY</span><FilterSelect label="Category" value={category} onChange={setCategory} disabled={spinning || revealing} options={[{value:"All categories",icon:"◎"},...categories.map(c => ({value:c.name,icon:c.icon}))]}/></div>
+          <div className="filter-field"><span>YOUR CHALLENGE</span><FilterSelect label="Your challenge" value={challenge} onChange={setChallenge} disabled={spinning || revealing} options={[{value:"None"},{value:"Surprise me",icon:"✧"},...challenges.map(c => ({value:c.name,icon:c.icon}))]}/></div>
+          <div className="filter-field"><span>DIFFICULTY</span><FilterSelect label="Difficulty" value={difficulty} onChange={setDifficulty} disabled={spinning || revealing} options={[{value:"All levels"},{value:"Easy"},{value:"Medium"},{value:"Hard"}]}/></div>
+          <button className="filter-reset" title="Reset filters" aria-label="Reset filters" disabled={spinning || revealing} onClick={() => {setCategory("All categories");setChallenge("None");setDifficulty("All levels");}}><Icon name="reset" size={18}/></button>
         </section>
-        <TopicLibrary disabled={spinning} onSelect={topic => chooseRound({topic, challenge})}/>
+        <TopicLibrary disabled={spinning || revealing} onSelect={topic => chooseRound({topic, challenge})}/>
         <div className="notice" role="status">{notice}</div>
-        {history.length > 0 && <section className="history"><div className="section-label">YOUR RECENT SPINS <span>{history.length}</span></div><div className="history-grid">{history.slice(0,3).map((r,i) => <button disabled={spinning} key={`${r.topic.id}-${i}`} onClick={() => chooseRound(r)}><small>{r.topic.category}</small><span>{r.topic.text}</span><Icon name="arrow" size={16}/></button>)}</div></section>}
-        </> : <section className="saved-panel"><button className="saved-back" onClick={() => setView("arcade")}>← Back to Topic Spin</button><span className="section-label">THE KEEPERS</span><h2>Your conversation collection.</h2><p>Saved on this browser, ready for another round.</p>{saved.length ? <div className="saved-grid">{saved.map(r => <button key={r.topic.id+r.challenge} onClick={() => chooseRound(r)}><small>{r.topic.category} · {r.challenge}</small><h3>{r.topic.text}</h3><span>Practice this topic →</span></button>)}</div> : <div className="empty-saved"><Icon name="bookmark" size={32}/><h3>A good topic is worth keeping.</h3><p>Save a topic from the arcade and it will be waiting here.</p><button className="start-button" onClick={() => setView("arcade")}>Back to the arcade →</button></div>}</section>}
+        {history.length > 0 && <section className="history"><div className="section-label">YOUR RECENT SPINS <span>{history.length}</span></div><div className="history-grid">{history.slice(0,3).map((r,i) => <button disabled={spinning || revealing} key={`${r.topic.id}-${i}`} onClick={() => chooseRound(r)}><small>{r.topic.category}</small><span>{r.topic.text}</span><Icon name="arrow" size={16}/></button>)}</div></section>}
+        </> : <section className="saved-panel"><button className="saved-back" onClick={() => setView("arcade")}>← Back to Topic Spin</button><span className="section-label">THE KEEPERS</span><h2>Your conversation collection.</h2><p>Saved on this browser, ready for another round.</p>{saved.length ? <div className="saved-grid">{saved.map(r => <button key={r.topic.id+r.challenge} onClick={() => chooseRound(r)}><small>{r.topic.category} · {r.challenge}</small><h3>{r.topic.text}</h3><span>Practice this topic →</span></button>)}</div> : <div className="empty-saved"><Image className="round-snail" src="/crawling-thoughts.png" alt="" width={54} height={54} unoptimized/><h3>A good topic is worth keeping.</h3><p>Save a topic from the arcade and it will be waiting here.</p><button className="start-button" onClick={() => setView("arcade")}>Back to the arcade →</button></div>}</section>}
       </main>
-      <footer><span className="footer-brand">speak<em>easy</em> ✦</span><p>A playground for your voice. No perfect speeches required.</p><span>{topics.length} topics · 8 ways to play</span></footer>
+      <footer><a className="creator-credit" href="https://www.instagram.com/crawling.thoughts/" target="_blank" rel="noopener noreferrer"><Image src="/crawling-thoughts.png" alt="" width={36} height={36} unoptimized/><span>by <strong>Crawling Thoughts</strong></span></a><p>A playground for your voice. No perfect speeches required.</p><span>{topics.length} topics · 8 ways to play</span></footer>
     </div>
   );
 }
