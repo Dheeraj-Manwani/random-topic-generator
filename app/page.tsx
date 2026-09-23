@@ -188,13 +188,13 @@ export default function Home() {
         {view === "arcade" ? <>
         <div className={`arcade-layout ${spinning ? "round-in-motion" : ""}`}><div className="arcade-sparkles" aria-hidden="true"><span>✧</span><span>✦</span><span>✧</span><span>✦</span></div>
           <section className={`machine ${spinning ? "is-spinning" : ""} ${revealing ? "is-revealing" : ""}`} aria-label="Speaking topic slot machine" aria-busy={spinning}>
-          <div className="machine-top"><Bulbs/><div className="marquee"><Image className="app-logo" src="/crawling-thoughts.png" alt="Crawling Thoughts logo" width={36} height={36} unoptimized/><h1>Topic Spin</h1><span>★</span></div><Bulbs reverse/></div>
+          <div className="machine-top"><Bulbs/><div className="marquee"><span>★</span><h1>Topic Spin</h1><span>★</span></div><Bulbs reverse/></div>
             <div className="machine-body"><div className="machine-stamp"><span>EST. 2026</span><span>GOOD TOPICS. GREAT STORIES.</span><span>№ 001</span></div>
               <div className="result-window"><div className="topic-meta"><span>{spinning ? "FINDING YOUR NEXT BIG IDEA" : round ? `${categories.find(c => c.name === round.topic.category)?.icon}  ${round.topic.category}` : "READY WHEN YOU ARE"}</span><span className="level">{spinning ? "•••" : round?.topic.difficulty || "—"}</span></div>
                 <div className="topic-viewport">
                   {spinning && reducedMotion ? <div className="topic-text"><span className="empty-topic-hint">Choosing your topic...</span></div> : spinning ? <div ref={spinStrip} className="topic-strip" aria-hidden="true" style={{ "--stops": spinTopics.length - 1 } as CSSProperties}>
                     {spinTopics.map((topic, i) => <div className="topic-row" key={i}><h3>{topic.text}.</h3></div>)}
-                  </div> : <div className="topic-text">{round ? <h3>{round.topic.text}.</h3> : <><Image className="empty-snail" src="/crawling-thoughts.png" alt="" width={46} height={46} unoptimized/><span className="empty-topic-hint">Pull the lever to begin</span></>}</div>}
+                  </div> : <div className="topic-text">{round ? <h3>{round.topic.text}.</h3> : <span className="empty-topic-hint">Pull the lever to begin</span>}</div>}
                 </div>
                 <span className="sr-only" role="status" aria-live="polite">{spinning ? "Spinning topics" : round ? round.topic.text + ". " + round.challenge : "No topic selected. Spin to begin."}</span>
                 <div className="challenge-label">{spinning ? "✦  The possibilities are spinning" : round?.challenge === "None" ? "No challenge" : round && currentChallenge ? `${currentChallenge.icon}  ${round.challenge}` : "✦  Your next topic is one spin away"}</div>
